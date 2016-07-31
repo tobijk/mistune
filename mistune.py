@@ -28,12 +28,13 @@ _newline_pattern = re.compile(r'\r\n|\r')
 _block_quote_leading_pattern = re.compile(r'^ *> ?', flags=re.M)
 _block_code_leading_pattern = re.compile(r'^ {4}', re.M)
 _inline_tags = [
-    'a', 'em', 'strong', 'small', 's', 'cite', 'q', 'dfn', 'abbr', 'data',
-    'time', 'code', 'var', 'samp', 'kbd', 'sub', 'sup', 'i', 'b', 'u', 'mark',
-    'ruby', 'rt', 'rp', 'bdi', 'bdo', 'span', 'br', 'wbr', 'ins', 'del',
-    'img', 'font',
+    'u', 'i', 'b', 'tt', 'sup', 'sub', 'xx-small', 'x-small', 'small',
+    'medium', 'large', 'x-large', 'xx-large' 'color', 'br', 'counter',
+    'defterm', 'entity', 'img', 'idxref', 'idxterm', 'item', 'subitem',
+    'subsubitem', 'label', 'm', 'nobr', 'pagebreak', 'pageref', 'q',
+    'qq', 'ref', 'y'
 ]
-_pre_tags = ['pre', 'script', 'style']
+_pre_tags = ['verbatim', 'code']
 _valid_end = r'(?!:/|[^\w\s@]*@)\b'
 _valid_attr = r'''\s*[a-zA-Z\-](?:\=(?:"[^"]*"|'[^']*'|[^\s'">]+))?'''
 _block_tag = r'(?!(?:%s)\b)\w+%s' % ('|'.join(_inline_tags), _valid_end)
@@ -391,6 +392,9 @@ class BlockLexer(object):
         self.tokens.append(item)
 
     def _process_table(self, m):
+        header = re.sub(r'(?:^ *\|)|(?:\| *$)', '', m.group(1))
+        width  = [len(s) for s in header.split("|")]
+
         header = re.sub(r'^ *| *\| *$', '', m.group(1))
         header = re.split(r' *\| *', header)
         align = re.sub(r' *|\| *$', '', m.group(2))
@@ -410,6 +414,7 @@ class BlockLexer(object):
             'type': 'table',
             'header': header,
             'align': align,
+            'width': width
         }
         return item
 
@@ -455,9 +460,8 @@ class InlineGrammar(object):
     inline_html = re.compile(
         r'^(?:%s|%s|%s)' % (
             r'<!--[\s\S]*?-->',
-            r'<(\w+%s)((?:%s)*?)\s*>([\s\S]*?)<\/\1>' % (
-                _valid_end, _valid_attr),
-            r'<\w+%s(?:%s)*?\s*\/?>' % (_valid_end, _valid_attr),
+            r'<(\w[-\w]*%s)((?:%s)*?)\s*>([\s\S]*?)<\/\1>' % (_valid_end, _valid_attr),
+            r'<\w[-\w]*%s(?:%s)*?\s*\/?>' % (_valid_end, _valid_attr),
         )
     )
     autolink = re.compile(r'^<([^ >]+(@|:)[^ >]+)>')
@@ -1072,6 +1076,7 @@ class Markdown(object):
         )
 
     def output_table(self):
+        widths = self.token['width']
         aligns = self.token['align']
         aligns_length = len(aligns)
         cell = self.renderer.placeholder()
@@ -1079,8 +1084,9 @@ class Markdown(object):
         # header part
         header = self.renderer.placeholder()
         for i, value in enumerate(self.token['header']):
+            width = widths[i]
             align = aligns[i] if i < aligns_length else None
-            flags = {'header': True, 'align': align}
+            flags = {'header': True, 'align': align, 'width': width}
             cell += self.renderer.table_cell(self.inline(value), **flags)
 
         header += self.renderer.table_row(cell)
